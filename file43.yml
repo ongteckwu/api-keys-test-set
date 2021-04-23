@@ -1,0 +1,18 @@
+version: '{build}'
+image: 
+  - Visual Studio 2019
+nuget:
+  disable_publish_on_pr: true
+build_script:
+  - ps: .\Build.ps1
+test: off
+artifacts:
+- path: .\artifacts\**\*.nupkg
+  name: NuGet
+deploy:
+- provider: NuGet
+  name: production
+  api_key:
+    secure: 4sXzWeUabBHXzt9scM2bCaUCW1sXDqVMj5jKxtnKOr25pyaTcrfxcnhC+hmEYBQR
+  on:
+    appveyor_repo_tag: true

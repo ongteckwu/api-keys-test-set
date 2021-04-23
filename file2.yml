@@ -1,0 +1,285 @@
+version: 2.1
+description: |
+  Create and revoke packagecloud read tokens for packagecloud npm, maven (using gradle) and pypi repositories.
+  This will allow CircleCI jobs to get dependencies and libraries from packagecloud. See source README for further usage details.
+  Source and README: https://github.com/grantisdale/circleci-orbs
+commands:
+  create:
+    description: Create and configure packagecloud read token
+    parameters:
+      npm-repo:
+        type: boolean
+        default: false
+      maven-gradle-repo:
+        type: boolean
+        default: false
+      pypi-repo:
+        type: boolean
+        default: false
+      username:
+        type: string
+        description: Packagecloud account username
+      reponame:
+        type: string
+        description: Packagecloud repository name
+      mastertoken:
+        description: The master token for your packagecloud repository
+        type: string
+      packagecloudtoken:
+        description: Packagecloud API token
+        type: string
+    steps:
+      - when:
+          condition: << parameters.npm-repo >>
+          steps:
+            - run:
+                name:  Create npm read token
+                command: |
+                  if [[ "<< parameters.mastertoken >>" ]]; then
+                    curl -s https://<< parameters.mastertoken >>:@packagecloud.io/install/repositories/<< parameters.username >>/<< parameters.reponame >>/script.node.sh | bash
+                  else
+                    echo "Set packagecloud npm master token parameter"
+                    exit 1
+                  fi
+      - when:
+          condition: << parameters.maven-gradle-repo >>
+          steps:
+            - run:
+                name:  Create maven read token and set up gradle
+                command: |
+                  if [[ "<< parameters.packagecloudtoken >>" ]]; then
+                    UNIQUE_ID="`hostname -f`-<< parameters.reponame >>"
+                    TOKEN_URL=https://<< parameters.packagecloudtoken >>:@packagecloud.io/api/v1/repos/<< parameters.username >>/<< parameters.reponame >>/master_tokens/<< parameters.mastertoken >>/read_tokens.json
+                    curl -s -f -X POST -F "read_token[name]=${UNIQUE_ID}" $TOKEN_URL >/tmp/token.json
+                    awk '{gsub("[{\"}]+", ""); gsub(",", "\n"); print $0}' /tmp/token.json > ~/token.params
+                    mkdir -p ~/.gradle
+                    echo "mavenPassword=<< parameters.packagecloudtoken >>" >> ~/.gradle/gradle.properties
+                    echo `echo << parameters.reponame >>token | sed 's/-//g'`=`sed -n 's/value://p' <~/token.params` >>~/.gradle/gradle.properties
+                    echo "<< parameters.reponame >> << parameters.mastertoken >> `sed -n 's/id://p' ~/token.params`" >> ~/revoke.list
+                    cp ~/.gradle/gradle.properties .
+                  else
+                    echo "Set packagecloud API token parameter"
+                    exit 1
+                  fi
+      - when:
+          condition: << parameters.pypi-repo >>
+          steps:
+            - run:
+                name: Create pypi read token
+                command: |
+                  if [[ "<< parameters.mastertoken >>" ]]; then
+                    UNIQUE_ID=`hostname -f`
+                    export READ_TOKEN=`curl -XPOST --data "name=${UNIQUE_ID}" https://<< parameters.mastertoken >>@packagecloud.io/install/repositories/<< parameters.username >>/<< parameters.reponame >>/tokens.text`
+                    echo "export READ_TOKEN=${READ_TOKEN}" >> $BASH_ENV
+                  else
+                    echo "Set packagecloud pypi master token parameter"
+                    exit 1
+                  fi
+  revoke:
+    description: |
+      Revoke/clean up read token(s) from packagecloud. For npm and pypi repositories the reponame parameter must be set and the packagecloud cli will need to be installed before running this command.
+    parameters:
+      npm-repo:
+        type: boolean
+        default: false
+      maven-gradle-repo:
+        type: boolean
+        default: false
+      pypi-repo:
+        type: boolean
+        default: false
+      username:
+        type: string
+        description: Packagecloud account username
+      reponame:
+        type: string
+        default: ""
+        description: Packagecloud repository name
+      packagecloudtoken:
+        description: Packagecloud API token
+        type: string
+    steps:
+      - run:
+          name: Install packagecloud CLI
+          command: |
+            install () {
+            # Set sudo to work whether logged in as root user or non-root user
+            if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+            if [[ $(command -v gem) == "" ]]; then
+              $SUDO apt-get update && \
+              $SUDO apt-get install ruby-full -y && \
+              $SUDO gem install rake || true
+            fi
+            # On new gen CircleCI images gem is installed but not availible to sudo
+            # If that is that case then check here before running install of package_cloud command
+            if [[ $(sudo bash -c 'command -v gem') == "" ]]; then
+              gem install package_cloud
+            else
+              $SUDO gem install package_cloud
+            fi
+            }
+
+            if [[ $(command -v package_cloud) == "" ]]; then
+              install
+            else
+              echo "packagecloud CLI is already installed."
+            fi
+          when: always
+      - when:
+          condition: << parameters.npm-repo >>
+          steps:
+            - run:
+                name: Revoke npm read token
+                command: |
+                  if [[ "<< parameters.reponame >>" ]]; then
+                    export PACKAGECLOUD_TOKEN=<< parameters.packagecloudtoken >>
+                    package_cloud read_token destroy << parameters.username >>/<< parameters.reponame >> default/`hostname -f`
+                  else
+                    echo "Set reponame parameter"
+                    exit 1
+                  fi
+                when: always
+      - when:
+          condition: << parameters.maven-gradle-repo >>
+          steps:
+            - run:
+                name: Revoke maven read token(s)
+                command: |
+                  while read revoke_entry; do
+                    set $revoke_entry
+                    REPO=$1
+                    TOKEN=$2
+                    ID=$3
+                    curl -s -f -X DELETE https://<< parameters.packagecloudtoken >>:@packagecloud.io/api/v1/repos/<< parameters.username >>/${REPO}/master_tokens/${TOKEN}/read_tokens/${ID}
+                  done < ~/revoke.list
+                when: always
+      - when:
+          condition: << parameters.pypi-repo >>
+          steps:
+            - run:
+                name: Revoke pypi read token
+                command: |
+                  if [[ "<< parameters.reponame >>" ]]; then
+                    export PACKAGECLOUD_TOKEN=<< parameters.packagecloudtoken >>
+                    package_cloud read_token destroy << parameters.username >>/<< parameters.reponame >> default/`hostname -f`
+                  else
+                    echo "Set reponame parameter"
+                    exit 1
+                  fi
+                when: always
+examples:
+  packagecloud-npm-repository:
+    description: |
+      Create a read token for a packagecloud npm repository; use with npm/yarn; then remove token from packagecloud. See README for further usage details
+    usage:
+      version: 2.1
+      orbs:
+        packagecloud: grantisdale/packagecloud@x.y.z
+      jobs:
+        build:
+          docker:
+          - image: circleci/node:10.16.3
+          steps:
+            - checkout
+
+            - packagecloud/create:
+                npm-repo: true
+                username: packagecloud-username
+                reponame: packagecloud-npm-reponame
+                mastertoken: "$MY_NPM_MASTER_TOKEN"
+                packagecloudtoken: "$MY_PACKAGECLOUD_API_TOKEN"
+
+            - run:
+                name: Install and test
+                command: |
+                  yarn install
+                  yarn test
+
+            - run:
+                name: Install packagecloud cli
+                command: |
+                  if [[ $EUID == 0 ]]; then export SUDO=""; else export SUDO="sudo"; fi
+                  $SUDO apt-get install ruby-full
+                  $SUDO gem install rake
+                  $SUDO gem install package_cloud
+
+            - packagecloud/revoke:
+                npm-repo: true
+                username: packagecloud-username
+                reponame: packagecloud-npm-reponame
+                packagecloudtoken: "$MY_PACKAGECLOUD_API_TOKEN"
+
+  packagecloud-maven-repository:
+    description: |
+      Create a read token for a packagecloud maven repository; use with gradle and then remove token(s) from packagecloud. See README for further usage details
+    usage:
+      version: 2.1
+      orbs:
+        packagecloud: grantisdale/packagecloud@x.y.z
+      jobs:
+        build:
+          machine:
+            image: ubuntu-1604:201903-01
+          steps:
+            - checkout
+
+            - packagecloud/create:
+                maven-gradle-repo: true
+                username: packagecloud-username
+                reponame: packgecloud-maven-releases-reponame
+                mastertoken: "$MY_MAVEN_RELEASES_REPO_MASTER_TOKEN"
+                packagecloudtoken: "$MY_PACKAGECLOUD_API_TOKEN"
+
+            - packagecloud/create:
+                maven-gradle-repo: true
+                username: packagecloud-username
+                reponame: packgecloud-maven-snapshots-reponame
+                mastertoken: "$MY_MAVEN_SNAPSHOTS_REPO_MASTER_TOKEN"
+                packagecloudtoken: "$MY_PACKAGECLOUD_API_TOKEN"
+
+            - run:
+                name: Build
+                command: |
+                  ./gradlew
+
+            - packagecloud/revoke:
+                maven-gradle-repo: true
+                username: packagecloud-username
+                packagecloudtoken: "$MY_PACKAGECLOUD_API_TOKEN"
+
+  packagecloud-pypi-repository:
+    description: |
+      Create read token for a packagecloud pypi repository; use with pip; then remove token from packagecloud. See README for further usage details
+    usage:
+      version: 2.1
+      orbs:
+        packagecloud: grantisdale/packagecloud@x.y.z
+      jobs:
+        build:
+          machine:
+            image: ubuntu-1604:201903-01
+          steps:
+            - checkout
+
+            - packagecloud/create:
+                pypi-repo: true
+                username: packagecloud-username
+                reponame: packagecloud-pypi-reponame
+                mastertoken: "tFVrucYnquwlV7UVZtfmaL5cOXGDS90HdRrMJM6nPMyx5C0l2ZXxNnn30"
+                packagecloudtoken: "$MY_PACKAGECLOUD_API_TOKEN"
+
+            - run:
+                name: Install dependencies
+                command: |
+                  pip3 install -U -r requirements.txt --extra-index-url=https://${READ_TOKEN}:@packagecloud.io/packagecloud-username/packagecloud-pypi-reponame/pypi/simple
+
+            - run:
+                name: Install packagecloud cli
+                command: |
+                  gem install package_cloud
+
+            - packagecloud/revoke:
+                pypi-repo: true
+                username: packagecloud-username
+                reponame: packagecloud-pypi-reponame
+                packagecloudtoken: "OgZLUrucYnquwlV7d39bmdD3kfVs07X2ZXxNnn311zHS"            

@@ -1,0 +1,138 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlin-kapt'
+apply plugin: "androidx.navigation.safeargs.kotlin"
+
+android {
+    compileSdkVersion 30
+    buildToolsVersion "30.0.1"
+
+    defaultConfig {
+        applicationId "learn.htm.projectlearn"
+        minSdkVersion 26
+        targetSdkVersion 30
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        def API_URL = "https://api.themoviedb.org/3/"
+        def SMALL_IMAGE_URL = "https://image.tmdb.org/t/p/w200"
+        def LARGE_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
+        def ORIGINAL_IMAGE_URL = "https://image.tmdb.org/t/p/original"
+        def API_KEY = "3e047b2cc8fc38537ee7b3e6f547e53c"
+
+
+        debug {
+            buildConfigField("String", "API_URL", "\"${API_URL}\"")
+            buildConfigField("String", "SMALL_IMAGE_URL", "\"${SMALL_IMAGE_URL}\"")
+            buildConfigField("String", "LARGE_IMAGE_URL", "\"${LARGE_IMAGE_URL}\"")
+            buildConfigField("String", "ORIGINAL_IMAGE_URL", "\"${ORIGINAL_IMAGE_URL}\"")
+            buildConfigField("String", "API_KEY", "\"${API_KEY}\"")
+        }
+
+        release {
+            buildConfigField("String", "API_URL", "\"${API_URL}\"")
+            buildConfigField("String", "SMALL_IMAGE_URL", "\"${SMALL_IMAGE_URL}\"")
+            buildConfigField("String", "LARGE_IMAGE_URL", "\"${LARGE_IMAGE_URL}\"")
+            buildConfigField("String", "ORIGINAL_IMAGE_URL", "\"${ORIGINAL_IMAGE_URL}\"")
+            buildConfigField("String", "API_KEY", "\"${API_KEY}\"")
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    buildFeatures {
+        dataBinding = true
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+    implementation deps.kotlin.stdlib
+    implementation deps.ktx
+    implementation deps.appcompat
+    implementation deps.constraintlayout
+    testImplementation deps.testJunit
+    androidTestImplementation deps.junit
+    androidTestImplementation deps.espresso
+
+    implementation deps.preference
+
+    // Lifecycle
+    implementation deps.lifecycle.extensions
+    implementation deps.lifecycle.viewmodel
+    implementation deps.lifecycle.livedata
+    implementation deps.lifecycle.runtime
+    implementation deps.lifecycle.common
+
+    // Kotlin Coroutines
+    implementation deps.coroutines.core
+    implementation deps.coroutines.android
+
+    // Koin AndroidX Scope features
+    implementation deps.koin.scope
+    // Koin AndroidX ViewModel features
+    implementation deps.koin.viewmodel
+    // Koin AndroidX Fragment features
+    implementation deps.koin.fragment
+    // Koin AndroidX Experimental features
+    implementation deps.koin.ext
+
+    // Retrofit 2 & Moshi
+    implementation deps.retrofit.retrofit
+    implementation deps.retrofit.converter
+    implementation deps.retrofit.mock
+    implementation deps.retrofit.rxjava2
+
+    // Moshi
+    implementation deps.moshi.moshi
+    implementation deps.moshi.kotlin
+    implementation deps.moshi.adapters
+    kapt deps.moshi.codegen
+
+    implementation deps.material
+    implementation deps.support
+
+    // OkHttp 3
+    implementation deps.okhttp3.okhttp
+    implementation deps.okhttp3.logging
+
+    // Rx
+    implementation deps.reactivex.rxjava
+    implementation deps.reactivex.rxandroid
+
+    // Room Database Library
+    implementation deps.room.runtime
+    kapt deps.room.compiler
+    // optional - Kotlin Extensions and Coroutines support for Room
+    implementation deps.room.ktx
+    // optional - RxJava support for Room
+    implementation deps.room.rxjava2
+
+    //Timber
+    implementation deps.timber
+
+    implementation deps.paging
+
+    implementation deps.circleimageview
+
+    implementation deps.gson
+
+    // Glide
+
+    implementation deps.glide.glide
+    implementation deps.glide.transformations
+    kapt deps.glide.compiler
+
+    // Kotlin
+    implementation deps.navigation.fragment
+    implementation deps.navigation.ktx
+    // Feature module Support
+    implementation deps.navigation.features
+    // Testing Navigation
+    implementation deps.navigation.testing
+
+}
